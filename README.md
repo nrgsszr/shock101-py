@@ -1,37 +1,42 @@
 # Echo Lite
 
-عامل آموزشی ترمینال برای دورهٔ SHOCK 101. یک مدل آزمایشی درخواست کاربر را می‌خواند و ابزار مناسب را از طریق قرارداد JSON درخواست می‌کند. حلقهٔ عامل ابزار را اجرا می‌کند، نتیجه را به مدل برمی‌گرداند و هر گام را در فایل لاگ ثبت می‌کند. اجرای برنامه فقط به کتابخانهٔ استاندارد پایتون وابسته است.
+I built Echo Lite for the SHOCK 101 Python mini-project to learn how a terminal agent works. A rule-based model reads the user's request and asks for a tool using JSON. The agent runs the tool, sends the result back to the model, and records each step. The app uses only Python's standard library at runtime.
 
-## اجرا
+## Run the project
 
-به Python 3.11 یا بالاتر و `uv` نیاز داری. از ریشهٔ مخزن اجرا کن:
+You need Python 3.11 or newer and `uv`. From the project directory, run:
 
 ```bash
 uv sync
 uv run python -m echo_lite "what is 12*7 and the time in UTC?"
-uv run python -m echo_lite "word count: سلام دنیا hello"
+uv run python -m echo_lite "word count: hello from echo"
 uv run python -m echo_lite -- "-(2+3)"
 ```
 
-خروجی درخواست اول شامل `12*7 = 84` و زمان فعلی UTC است. درخواست دوم `Word count: 3` را چاپ می‌کند. مدل آزمایشی یک عبارت ریاضی را از متن پیدا می‌کند و از الگوهای مشخصی برای درخواست ساعت UTC و شمارش کلمات استفاده می‌کند.
+The first command that runs Echo Lite prints `12*7 = 84` along with the current UTC time. The word-count example prints `Word count: 3`. Use `--` before an expression that starts with a minus sign so the command-line parser treats it as the task.
 
-## ساختار
+## How it works
 
-| فایل | مسئولیت |
+1. The agent starts the message history with the user's task and passes it to `FakeModel`.
+2. The model looks for an arithmetic expression, a request for the time in UTC, or a word-count request. It returns a JSON string such as `{"tool": "calc", "arg": "12*7"}`.
+3. The agent finds the tool in the registry and runs it. It appends the result as a message with the role `tool`. If the tool fails, the agent sends the model a result that starts with `ERROR`.
+4. The loop continues until the model returns a final reply such as `{"final": "12*7 = 84"}`. The default limit is five model calls.
+
+To try a different model, pass a callable to `run(task, model=None, max_steps=5, log_dir="runs")`. The callable receives the message history and returns a JSON string in one of the two formats above.
+
+Each run creates a separate JSON Lines file in `runs/`. The filename uses a UTC timestamp with microseconds. Each line includes a step number and an event type, so you can follow the order of tool calls, errors, and the final reply.
+
+## Project structure
+
+| File | What it does |
 | --- | --- |
-| `echo_lite/tools.py` | ثبت ابزارها با `@tool`، فراخوانی آن‌ها با `dispatch` و اجرای ماشین‌حساب، شمارش واژه و ساعت UTC |
-| `echo_lite/model.py` | انتخاب ابزار و ساخت پاسخ نهایی با مدل آزمایشی `FakeModel` |
-| `echo_lite/agent.py` | نگه‌داری پیام‌ها، اجرای حلقه با سقف گام، مدیریت خطا و ثبت لاگ |
-| `echo_lite/__main__.py` | دریافت متن از ترمینال و نمایش نتیجه |
-| `tests/test_echo_lite.py` | تست ابزارها، قرارداد مدل، لاگ و سقف فراخوانی‌ها |
+| `echo_lite/tools.py` | Registers tools with `@tool` and runs them through `dispatch`. Includes a calculator, a word counter, and a UTC clock. |
+| `echo_lite/model.py` | Chooses tools and builds the final reply with `FakeModel`. |
+| `echo_lite/agent.py` | Manages message history, runs the loop, handles errors, and writes logs. |
+| `echo_lite/__main__.py` | Reads the task from the command line and prints the answer. |
+| `tests/test_echo_lite.py` | Tests the tools, model protocol, step limit, and run logs. |
 
-## قرارداد مدل و لاگ
-
-`run(task, model=None, max_steps=5, log_dir="runs")` یک مدل قابل فراخوانی می‌گیرد که با فهرست پیام‌ها کار می‌کند. هر فراخوانی مدل یک رشتهٔ JSON با شکل `{"tool": "calc", "arg": "12*7"}` یا `{"final": "..."}` برمی‌گرداند. اولین پیام نقش `user` دارد. بعد از اجرای ابزار، آخرین پیام نقش `tool` دارد و شامل نتیجه یا متنی با شروع `ERROR` است.
-
-هر اجرا در `runs/` یک فایل JSONL با نام مبتنی بر زمان UTC و میکروثانیه می‌سازد. هر خط دست‌کم شامل `step` و `type` است.
-
-## تست‌ها
+## Run the tests
 
 ```bash
 uv run python -m pytest -q
@@ -39,4 +44,4 @@ uv run python -m pytest -v
 uv run python -m pytest -q -k max_steps
 ```
 
-`pytest` وابستگی توسعه است. تست‌ها فایل‌های لاگ را در مسیرهای موقت می‌سازند.
+`pytest` is a development dependency. The tests write their logs to temporary directories.
